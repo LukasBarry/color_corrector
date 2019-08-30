@@ -10,11 +10,11 @@ class Color
   end
 
   def relative_luminance
-    ColorCorrecter.relative_luminance(r, g, b)
+    ColorCorrector.relative_luminance(r, g, b)
   end
 
   def ratio(color)
-    ColorCorrecter.ratio(self, color)
+    ColorCorrector.ratio(self, color)
   end
 
   def to_rgb
