@@ -10,6 +10,7 @@ Gem::Specification.new do |s|
     'lib/color_corrector/color.rb',
     'lib/color_corrector/version.rb'
   ]
+  s.homepage = 'https://github.com/LukasBarry/color_corrector'
   s.require_paths = ['lib']
   s.license = 'MIT'
 end
