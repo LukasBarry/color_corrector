@@ -4,7 +4,7 @@ require 'color_corrector/color'
 require 'color_corrector/version'
 
 # # Color Corrector
-module ColorCorrecter
+module ColorCorrector
   class << self
     def make_readable(background, foreground, level = 'AA', size = 'large')
       until readable?(background, foreground, level, size)
