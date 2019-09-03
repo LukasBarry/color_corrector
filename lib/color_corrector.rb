@@ -5,10 +5,18 @@ require 'color_corrector/version'
 
 # # Color Corrector
 module ColorCorrector
+  ONE_SIXTH = 1 / 6.0
+  ONE_THIRD = 1 / 3.0
+  TWO_THIRDS = 2 / 3.0
+
   class << self
     def make_readable(background, foreground, level = 'AA', size = 'large')
       until readable?(background, foreground, level, size)
-        background = darken(background)
+        background = if light?(foreground)
+                       darken(background)
+                     else
+                       lighten(background)
+                     end
       end
       background
     end
@@ -16,13 +24,11 @@ module ColorCorrector
     def readable?(background, foreground, level = 'AA', size = 'large')
       ratio = contrast_ratio(background, foreground)
       contrast = case [level, size]
-                 when %w[AA small], %w[AAA large]
-                   4.5
                  when %w[AA large]
                    3
                  when %w[AAA small]
                    7
-                 else
+                 else # %w[AA small], %w[AAA large]
                    4.5
                  end
       ratio >= contrast
@@ -60,68 +66,92 @@ module ColorCorrector
       if max == min
         hue = saturation = 0
       else
-        dark = max - min
+        chroma = max - min
         saturation =
-          lightness > 0.5 ? (dark / (2 - max - min)) : (dark / (max + min))
+          lightness > 0.5 ? (chroma / (2 - max - min)) : (chroma / (max + min))
         hue = case max
               when red
-                (green - blue) / dark + (green < blue ? 6 : 0)
+                (green - blue) / chroma + (green < blue ? 6 : 0)
               when green
-                (blue - red) / dark + 2
+                (blue - red) / chroma + 2
               when blue
-                (red - green) / dark + 4
+                (red - green) / chroma + 4
               end
         hue /= 6
       end
       [hue, saturation, lightness]
     end
 
+    # Variables papa, quebec and tango were originally designated by single
+    # letters but have been changed to match the NATO photonetic alphabet
     def hsl_to_rgb(hue, saturation, lightness)
       if saturation.zero?
         red = green = blue = lightness
       else
-        quality = if lightness < 0.5
-                    lightness * (1 + saturation)
-                  else
-                    lightness + saturation - lightness * saturation
-                  end
-        pure = 2 * lightness - quality
-        red = hue_to_rgb(pure, quality, hue + (1 / 3.0))
-        green = hue_to_rgb(pure, quality, hue)
-        blue = hue_to_rgb(pure, quality, hue - (1 / 3.0))
+        quebec = if lightness < 0.5
+                   lightness * (1 + saturation)
+                 else
+                   lightness + saturation - lightness * saturation
+                 end
+        papa = 2 * lightness - quebec
+        red, green, blue = [ONE_THIRD, 0, -ONE_THIRD].map do |offset|
+          hue_to_rgb papa, quebec, hue + offset
+        end
       end
-      [red * 255, green * 255, blue * 255].map(&:round)
+      [red, green, blue].map { |component| (component * 255).round }
     end
 
-    def hue_to_rgb(pure, quality, top)
-      top += 1 if top.negative?
-      top -= 1 if top > 1
-      if top < (1 / 6.0)
-        pure + (quality - pure) * 6 * top
-      elsif top < (1 / 2.0)
-        quality
-      elsif top < (2 / 3.0)
-        pure + (quality - pure) * ((2 / 3.0) - top) * 6
+    # :reek:FeatureEnvy
+    def hue_to_rgb(papa, quebec, tango)
+      tango = bound_hue_01(tango)
+      if tango < ONE_SIXTH
+        papa + (quebec - papa) * 6 * tango
+      elsif tango < 0.5 # (1 / 2.0)
+        quebec
+      elsif tango < TWO_THIRDS
+        papa + (quebec - papa) * (TWO_THIRDS - tango) * 6
       else
-        pure
+        papa
       end
     end
 
+    def bound_hue_01(hue)
+      if hue.negative?
+        hue + 1
+      elsif hue > 1
+        hue - 1
+      else
+        hue
+      end
+    end
+
+    # :reek:UncommunicativeVariableName and :reek:UncommunicativeParameterName
     def ratio(rgb1, rgb2)
       c1, c2 = [rgb1, rgb2].map { |rgb| Color.new(rgb) }
       l1, l2 = [c1, c2].map(&:relative_luminance).sort
       (l2 + 0.05) / (l1 + 0.05)
     end
 
-    # :reek:UncommunicativeParameterName
-    def relative_luminance(r, g, b)
-      (0.2126 * f(r)) + (0.7152 * f(g)) + (0.0722 * f(b))
+    def relative_luminance(red, green, blue)
+      (0.2126 * f(red)) + (0.7152 * f(green)) + (0.0722 * f(blue))
     end
 
-    # :reek:UncommunicativeVariableName
+    # :reek:UncommunicativeVariableName and :reek:UncommunicativeMethodName
     def f(component)
       c = component / 255.0
       c <= 0.03928 ? c : ((c + 0.055) / 1.055)**2.4
+    end
+
+    def light?(hex)
+      red, green, blue = hex.delete('#').scan(/../).map(&:hex)
+      luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+      luma >= 128
+    end
+
+    def dark?(hex)
+      red, green, blue = hex.delete('#').scan(/../).map(&:hex)
+      luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+      luma < 128
     end
   end
 end
